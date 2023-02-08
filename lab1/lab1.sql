@@ -13,7 +13,6 @@ BEGIN
     FOR i IN 1..N
         LOOP
             INSERT INTO MyTable
-                (id, val)
             VALUES (i, DBMS_RANDOM.RANDOM());
         END LOOP;
 END;
@@ -54,37 +53,41 @@ CREATE OR REPLACE FUNCTION get_insert_query(id NUMBER, val NUMBER := DBMS_RANDOM
     IS
     table_name CONSTANT CHAR(7) := 'MyTable';
 BEGIN
-    RETURN UTL_LMS.FORMAT_MESSAGE('INSERT INTO %s (id, val) VALUES (%d, %d);', table_name, TO_CHAR(id), TO_CHAR(val));
+    RETURN UTL_LMS.FORMAT_MESSAGE('INSERT INTO %s (id, val) VALUES (%d, %d)', table_name, TO_CHAR(id), TO_CHAR(val));
 END;
 
 --Task 5
-CREATE OR REPLACE PROCEDURE insert_query(id NUMBER := DBMS_RANDOM.RANDOM(), val NUMBER := DBMS_RANDOM.RANDOM())
-IS
+CREATE OR REPLACE PROCEDURE insert_query(id NUMBER,
+                                         val NUMBER := DBMS_RANDOM.RANDOM())
+    IS
 BEGIN
-    INSERT INTO MyTable
-    VALUES
-    (id, val);
+    EXECUTE IMMEDIATE get_insert_query(id, val);
 END;
 
 
-begin
-    DBMS_OUTPUT.ENABLE(buffer_size => NULL);
-end;
+CREATE OR REPLACE PROCEDURE update_query(id NUMBER, val NUMBER := DBMS_RANDOM.RANDOM())
+    IS
+    table_name CONSTANT CHAR(7) := 'MyTable';
+BEGIN
+    EXECUTE IMMEDIATE UTL_LMS.FORMAT_MESSAGE('UPDATE %s SET val=%d WHERE id=%d', table_name, TO_CHAR(val), TO_CHAR(id));
+END;
 
-SELECT F2()
-FROM DUAL;
 
-SELECT get_insert_query(1123, 123)
-FROM DUAL;
-SELECT get_insert_query(112134)
-FROM DUAL;
+CREATE OR REPLACE PROCEDURE delete_query(id NUMBER)
+    IS
+    table_name CONSTANT CHAR(7) := 'MyTable';
+BEGIN
+    EXECUTE IMMEDIATE UTL_LMS.FORMAT_MESSAGE('DELETE FROM %s WHERE id=%d', table_name, TO_CHAR(id));
+END;
 
-SELECT COUNT(*)
-FROM MyTable;
-SELECT *
-FROM MyTable;
 
-EXEC insert_query(11, 11);
+--Task 6
+CREATE OR REPLACE FUNCTION get_total_remuneration(salary NUMBER, annual_percentage_rate NUMBER)
+IS
+BEGIN
+    
+END;
+
 
 DELETE
 FROM MyTable
