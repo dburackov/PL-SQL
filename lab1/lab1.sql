@@ -1,15 +1,16 @@
 SET SERVEROUTPUT ON;
 --Task 1
+DROP TABLE MyTable;
+
 CREATE TABLE MyTable
 (
     id  NUMBER,
     val NUMBER
 );
 
-
 --Task 2
 DECLARE
-    N CONSTANT NUMBER := 10000;
+    N CONSTANT NUMBER := 10;
 BEGIN
     FOR i IN 1..N
         LOOP
@@ -60,13 +61,36 @@ SELECT F2 FROM DUAL;
 
 
 --Task 4
-CREATE OR REPLACE FUNCTION get_insert_query(id NUMBER, val NUMBER := DBMS_RANDOM.RANDOM())
+CREATE OR REPLACE FUNCTION get_insert_query(id_val NUMBER, val_val NUMBER := DBMS_RANDOM.RANDOM())
     RETURN VARCHAR2
     IS
     table_name CONSTANT CHAR(7) := 'MyTable';
+    res NUMBER;
+    cnt NUMBER;
+    exc EXCEPTION;
 BEGIN
-    RETURN UTL_LMS.FORMAT_MESSAGE('INSERT INTO %s (id, val) VALUES (%d, %d)', table_name, TO_CHAR(id), TO_CHAR(val));
+    SELECT count(*) INTO cnt FROM MyTable WHERE id=id_val;
+
+    IF cnt = 0 THEN
+        RAISE exc;
+    ELSE
+        SELECT val INTO res FROM MyTable WHERE id=id_val;
+        RETURN UTL_LMS.FORMAT_MESSAGE('INSERT INTO %s (id, val) VALUES (%d, %d)', table_name, TO_CHAR(id_val), TO_CHAR(res));
+    END IF;
+
+    RETURN UTL_LMS.FORMAT_MESSAGE('INSERT INTO %s (id, val) VALUES (%d, %d)', table_name, TO_CHAR(id_val), TO_CHAR(val_val));
+
+    EXCEPTION
+        WHEN exc THEN BEGIN
+            DBMS_OUTPUT.PUT_LINE('AAAAAAAAAAAAAAAAAA');
+            RETURN null;
+        END;
 END;
+
+SELECT get_insert_query(1) FROM DUAL;
+SELECT get_insert_query(11) FROM DUAL;
+
+SELECT  * FROM MyTable;
 
 --Task 5
 CREATE OR REPLACE PROCEDURE insert_query(id NUMBER,
@@ -117,7 +141,7 @@ RETURN NUMBER
 IS
     incorrect_value EXCEPTION;
 BEGIN
-    IF annual_percentage_rate < 0 OR salary < 0 THEN
+    IF annual_percentage_rate < 0 OR salary < 0 OR TRUNC(annual_percentage_rate) != annual_percentage_rate THEN
         RAISE incorrect_value;
     END IF;
 
@@ -133,7 +157,21 @@ BEGIN
 END;
 
 
-SELECT get_total_remuneration(81724, 1234) FROM DUAL;
+DECLARE
+    result NUMBER;
+BEGIN
+    SELECT get_total_remuneration(123, 1234)
+    INTO result
+    FROM DUAL;
+
+    DBMS_OUTPUT.PUT_LINE(result);
+
+    EXCEPTION
+        WHEN INVALID_NUMBER THEN
+            DBMS_OUTPUT.PUT_LINE('WRONG INPUT!!!!!!!!');
+        WHEN VALUE_ERROR THEN
+            DBMS_OUTPUT.PUT_LINE('WRONG INPUT!!!!!!!!');
+END;
 
 
 DELETE
