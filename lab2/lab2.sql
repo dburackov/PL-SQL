@@ -32,29 +32,28 @@ BEGIN
 
 END BEFORE STATEMENT;
 
-BEFORE EACH ROW IS
-BEGIN
+    BEFORE EACH ROW IS
+    BEGIN
 
-    unique_id := true;
+        unique_id := true;
 
-    LOOP
-        FETCH id_list INTO id_curr;
-        EXIT WHEN id_list%NOTFOUND;
+        LOOP
+            FETCH id_list INTO id_curr;
+            EXIT WHEN id_list%NOTFOUND;
 
-        IF id_curr = :NEW.ID THEN
-            unique_id := false;
-        END IF;
-    END LOOP;
+            IF id_curr = :NEW.ID THEN
+                unique_id := false;
+            END IF;
+        END LOOP;
 
-    CLOSE id_list;
+        CLOSE id_list;
 
-    IF NOT unique_id THEN
-        RAISE_APPLICATION_ERROR(-20999, 'NOT UNIQUE STUDENT ID');
-    end if;
+        IF NOT unique_id THEN
+            RAISE_APPLICATION_ERROR(-20999, 'NOT UNIQUE STUDENT ID');
+        end if;
 
-END BEFORE EACH ROW;
-
-END tr_unique_student_id;
+    END BEFORE EACH ROW;
+    END tr_unique_student_id;
 
 
 CREATE OR REPLACE TRIGGER tr_unique_group_id
@@ -73,29 +72,28 @@ BEGIN
 
 END BEFORE STATEMENT;
 
-BEFORE EACH ROW IS
-BEGIN
+    BEFORE EACH ROW IS
+    BEGIN
 
-    unique_id := true;
+        unique_id := true;
 
-    LOOP
-        FETCH id_list INTO id_curr;
-        EXIT WHEN id_list%NOTFOUND;
+        LOOP
+            FETCH id_list INTO id_curr;
+            EXIT WHEN id_list%NOTFOUND;
 
-        IF id_curr = :NEW.ID THEN
-            unique_id := false;
-        END IF;
-    END LOOP;
+            IF id_curr = :NEW.ID THEN
+                unique_id := false;
+            END IF;
+        END LOOP;
 
-    CLOSE id_list;
+        CLOSE id_list;
 
-    IF NOT unique_id THEN
-        RAISE_APPLICATION_ERROR(-20999, 'NOT UNIQUE GROUP ID');
-    end if;
+        IF NOT unique_id THEN
+            RAISE_APPLICATION_ERROR(-20999, 'NOT UNIQUE GROUP ID');
+        end if;
 
-END BEFORE EACH ROW;
-
-END tr_unique_group_id;
+    END BEFORE EACH ROW;
+    END tr_unique_group_id;
 
 
 CREATE OR REPLACE TRIGGER tr_unique_group_name
@@ -135,8 +133,7 @@ END BEFORE STATEMENT;
         end if;
 
     END BEFORE EACH ROW;
-
-END tr_unique_group_name;
+    END tr_unique_group_name;
 
 
 CREATE SEQUENCE student_id_seq
@@ -170,4 +167,17 @@ BEGIN
 END;
 
 
+-- Task 3 ____________________________________________
+
+CREATE OR REPLACE TRIGGER tr_group_delete_cascade
+    AFTER DELETE
+    ON GROUPS
+    FOR EACH ROW
+BEGIN
+    DELETE
+    FROM STUDENTS
+    WHERE STUDENTS.GROUP_ID = :OLD.ID;
+END;
+
+-- Task 4 ____________________________________________
 
