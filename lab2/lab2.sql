@@ -40,7 +40,6 @@ END BEFORE STATEMENT;
         LOOP
             FETCH id_list INTO id_curr;
             EXIT WHEN id_list%NOTFOUND;
-
             IF id_curr = :NEW.ID THEN
                 unique_id := false;
             END IF;
@@ -177,14 +176,16 @@ CREATE OR REPLACE TRIGGER tr_group_delete_cascade
     AFTER DELETE
     ON GROUPS
     FOR EACH ROW
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
 BEGIN
-    EXECUTE IMMEDIATE 'ALTER TRIGGER TR_C_VAL_UPDATE DISABLE';
+    EXECUTE IMMEDIATE 'ALTER TRIGGER tr_c_val_update DISABLE';
 
     DELETE
     FROM STUDENTS
     WHERE STUDENTS.GROUP_ID = :OLD.ID;
 
-    EXECUTE IMMEDIATE 'ALTER TRIGGER TR_C_VAL_UPDATE ENABLE';
+    EXECUTE IMMEDIATE 'ALTER TRIGGER tr_c_val_update ENABLE';
 END;
 
 
@@ -195,7 +196,7 @@ DROP TABLE STUDENTS_LOGS;
 CREATE TABLE STUDENTS_LOGS
 (
     ID NUMBER PRIMARY KEY,
-    TIME TIMESTAMP NOT NULL,
+    TIME TIMESTAMP(2) NOT NULL,
     OPERATION_TYPE VARCHAR2(10) NOT NULL,
     OLD_ID NUMBER DEFAULT NULL,
     OLD_NAME VARCHAR2(50) DEFAULT NULL,
@@ -227,12 +228,11 @@ CREATE OR REPLACE TRIGGER tr_student_log
     ON STUDENTS
     FOR EACH ROW
 BEGIN
-    DBMS_OUTPUT.PUT_LINE(CURRENT_TIMESTAMP);
     CASE
         WHEN INSERTING THEN BEGIN
             INSERT INTO STUDENTS_LOGS
             (TIME, OPERATION_TYPE, NEW_ID, NEW_NAME, NEW_GROUP_ID)
-            VALUES (CURRENT_TIMESTAMP, 'UPDATE', :NEW.ID, :NEW.NAME, :NEW.GROUP_ID);
+            VALUES (CURRENT_TIMESTAMP, 'INSERT', :NEW.ID, :NEW.NAME, :NEW.GROUP_ID);
         END;
 
         WHEN UPDATING THEN BEGIN
@@ -265,11 +265,18 @@ BEGIN
                     FROM STUDENTS
                     WHERE ID = curr.NEW_ID;
                 ELSIF curr.OPERATION_TYPE = 'UPDATE' THEN
-                    UPDATE STUDENTS
-                    SET ID = curr.OLD_ID,
-                        NAME = curr.OLD_NAME,
-                        GROUP_ID = curr.OLD_GROUP_ID
-                    WHERE ID = curr.NEW_ID;
+                    IF curr.OLD_ID = curr.NEW_ID THEN
+                        UPDATE STUDENTS
+                        SET NAME     = curr.OLD_NAME,
+                            GROUP_ID = curr.OLD_GROUP_ID
+                        WHERE ID = curr.NEW_ID;
+                    ELSE
+                        UPDATE STUDENTS
+                        SET ID       = curr.OLD_ID,
+                            NAME     = curr.OLD_NAME,
+                            GROUP_ID = curr.OLD_GROUP_ID
+                        WHERE ID = curr.NEW_ID;
+                    END IF;
                 ELSIF curr.OPERATION_TYPE = 'DELETE' THEN
                     INSERT INTO STUDENTS
                     VALUES (curr.OLD_ID, curr.OLD_NAME, curr.OLD_GROUP_ID);
@@ -290,6 +297,7 @@ CREATE OR REPLACE TRIGGER tr_c_val_update
     ON STUDENTS
     FOR EACH ROW
 DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
     cnt NUMBER;
 BEGIN
     CASE
@@ -323,13 +331,24 @@ BEGIN
         WHERE ID = :OLD.GROUP_ID;
 
         IF cnt = 0 THEN
-            DELETE
-            FROM GROUPS
-            WHERE ID = :OLD.GROUP_ID;
+            EXECUTE IMMEDIATE 'ALTER TRIGGER TR_GROUP_DELETE_CASCADE DISABLE';
+
+            DELETE FROM GROUPS WHERE ID = :OLD.GROUP_ID;
+
+            EXECUTE IMMEDIATE 'ALTER TRIGGER TR_GROUP_DELETE_CASCADE ENABLE';
         END IF;
     END IF;
+
+    COMMIT;
 
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
             DBMS_OUTPUT.PUT_LINE('GROUP DOES NOT EXISTS');
 END;
+
+
+BEGIN
+        roll_back(TO_TIMESTAMP('2023/03/10 09:50:00', 'YYYY/MM/DD HH:MI:SS'));
+end;
+
+
