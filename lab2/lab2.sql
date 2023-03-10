@@ -184,32 +184,7 @@ BEGIN
 END;
 
 
-CREATE OR REPLACE TRIGGER tr_student_delete_cascade
-    AFTER DELETE
-    ON STUDENTS
-    FOR EACH ROW
 
-DECLARE
-    student_amount NUMBER;
-BEGIN
-
---     SELECT C_VAL
---     INTO student_amount
---     FROM GROUPS
---     WHERE GROUPS.ID = :OLD.GROUP_ID;
-
-    IF student_amount = 1 THEN
-        NULL;--DELETE FROM GROUPS WHERE GROUPS.ID = :OLD.GROUP_ID;
-    END IF;
-
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            NULL;
-END;
-
-insert into groups values (3, 'aaa', 1);
-
-delete from GROUPS where id=4;
 
 
 -- Task 4 ____________________________________________
@@ -306,3 +281,40 @@ BEGIN
         END LOOP;
 END;
 
+
+-- Task 6 _______________________________________________________________
+
+CREATE OR REPLACE TRIGGER tr_c_val_update
+    AFTER INSERT OR UPDATE OF GROUP_ID OR DELETE
+    ON STUDENTS
+    FOR EACH ROW
+BEGIN
+    CASE
+        WHEN INSERTING THEN BEGIN
+            UPDATE GROUPS
+            SET C_VAL = C_VAL + 1
+            WHERE ID = :NEW.GROUP_ID;
+        END;
+
+        WHEN UPDATING ('GROUP_ID') THEN BEGIN
+            UPDATE GROUPS
+            SET C_VAL = C_VAL - 1
+            WHERE ID = :OLD.GROUP_ID;
+
+            UPDATE GROUPS
+            SET C_VAL = C_VAL + 1
+            WHERE ID = :NEW.GROUP_ID;
+        END;
+
+        WHEN DELETING THEN BEGIN
+            UPDATE GROUPS
+            SET C_VAL = C_VAL - 1
+            WHERE ID = :OLD.GROUP_ID;
+        END;
+
+    END CASE;
+
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            DBMS_OUTPUT.PUT_LINE('GROUP DOES NOT EXISTS');
+END;
