@@ -178,13 +178,14 @@ CREATE OR REPLACE TRIGGER tr_group_delete_cascade
     ON GROUPS
     FOR EACH ROW
 BEGIN
+    EXECUTE IMMEDIATE 'ALTER TRIGGER TR_C_VAL_UPDATE DISABLE';
+
     DELETE
     FROM STUDENTS
     WHERE STUDENTS.GROUP_ID = :OLD.ID;
+
+    EXECUTE IMMEDIATE 'ALTER TRIGGER TR_C_VAL_UPDATE ENABLE';
 END;
-
-
-
 
 
 -- Task 4 ____________________________________________
@@ -288,6 +289,8 @@ CREATE OR REPLACE TRIGGER tr_c_val_update
     AFTER INSERT OR UPDATE OF GROUP_ID OR DELETE
     ON STUDENTS
     FOR EACH ROW
+DECLARE
+    cnt NUMBER;
 BEGIN
     CASE
         WHEN INSERTING THEN BEGIN
@@ -311,8 +314,20 @@ BEGIN
             SET C_VAL = C_VAL - 1
             WHERE ID = :OLD.GROUP_ID;
         END;
-
     END CASE;
+
+    IF UPDATING ('GROUP_ID') OR DELETING THEN
+        SELECT C_VAL
+        INTO cnt
+        FROM GROUPS
+        WHERE ID = :OLD.GROUP_ID;
+
+        IF cnt = 0 THEN
+            DELETE
+            FROM GROUPS
+            WHERE ID = :OLD.GROUP_ID;
+        END IF;
+    END IF;
 
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
