@@ -170,40 +170,21 @@ BEGIN
 END;
 
 
--- Task 3 ____________________________________________
-
-CREATE OR REPLACE TRIGGER tr_group_delete_cascade
-    AFTER DELETE
-    ON GROUPS
-    FOR EACH ROW
-DECLARE
-    PRAGMA AUTONOMOUS_TRANSACTION;
-BEGIN
-    EXECUTE IMMEDIATE 'ALTER TRIGGER tr_c_val_update DISABLE';
-
-    DELETE
-    FROM STUDENTS
-    WHERE STUDENTS.GROUP_ID = :OLD.ID;
-
-    EXECUTE IMMEDIATE 'ALTER TRIGGER tr_c_val_update ENABLE';
-END;
-
-
 -- Task 4 ____________________________________________
 
 DROP TABLE STUDENTS_LOGS;
 
 CREATE TABLE STUDENTS_LOGS
 (
-    ID NUMBER PRIMARY KEY,
-    TIME TIMESTAMP(2) NOT NULL,
+    ID             NUMBER PRIMARY KEY,
+    TIME           TIMESTAMP(2) NOT NULL,
     OPERATION_TYPE VARCHAR2(10) NOT NULL,
-    OLD_ID NUMBER DEFAULT NULL,
-    OLD_NAME VARCHAR2(50) DEFAULT NULL,
-    OLD_GROUP_ID NUMBER DEFAULT NULL,
-    NEW_ID NUMBER DEFAULT NULL,
-    NEW_NAME VARCHAR2(50) DEFAULT NULL,
-    NEW_GROUP_ID NUMBER DEFAULT NULL
+    OLD_ID         NUMBER       DEFAULT NULL,
+    OLD_NAME       VARCHAR2(50) DEFAULT NULL,
+    OLD_GROUP_ID   NUMBER       DEFAULT NULL,
+    NEW_ID         NUMBER       DEFAULT NULL,
+    NEW_NAME       VARCHAR2(50) DEFAULT NULL,
+    NEW_GROUP_ID   NUMBER       DEFAULT NULL
 );
 
 CREATE SEQUENCE students_logs_id_seq
@@ -231,7 +212,7 @@ BEGIN
     CASE
         WHEN INSERTING THEN BEGIN
             INSERT INTO STUDENTS_LOGS
-            (TIME, OPERATION_TYPE, NEW_ID, NEW_NAME, NEW_GROUP_ID)
+                (TIME, OPERATION_TYPE, NEW_ID, NEW_NAME, NEW_GROUP_ID)
             VALUES (CURRENT_TIMESTAMP, 'INSERT', :NEW.ID, :NEW.NAME, :NEW.GROUP_ID);
         END;
 
@@ -243,10 +224,10 @@ BEGIN
 
         WHEN DELETING THEN BEGIN
             INSERT INTO STUDENTS_LOGS
-            (TIME, OPERATION_TYPE, OLD_ID, OLD_NAME, OLD_GROUP_ID)
+                (TIME, OPERATION_TYPE, OLD_ID, OLD_NAME, OLD_GROUP_ID)
             VALUES (CURRENT_TIMESTAMP, 'DELETE', :OLD.ID, :OLD.NAME, :OLD.GROUP_ID);
         END;
-    END CASE;
+        END CASE;
 END;
 
 
@@ -255,7 +236,9 @@ END;
 CREATE OR REPLACE PROCEDURE roll_back(time TIMESTAMP)
     IS
     CURSOR c_logs IS
-        SELECT * FROM STUDENTS_LOGS ORDER BY TIME DESC;
+        SELECT *
+        FROM STUDENTS_LOGS
+        ORDER BY TIME DESC;
 BEGIN
     FOR curr IN c_logs
         LOOP
@@ -289,66 +272,164 @@ BEGIN
         END LOOP;
 END;
 
+    
+-- Task 3 ____________________________________________
+
+CREATE OR REPLACE TRIGGER tr_group_delete_cascade
+    FOR DELETE
+    ON GROUPS
+    COMPOUND TRIGGER
+    --declare here
+    TYPE VECTOR IS TABLE OF NUMBER;
+    id_list VECTOR;
+
+BEFORE STATEMENT IS
+BEGIN
+    id_list := VECTOR();
+END BEFORE STATEMENT;
+
+    BEFORE EACH ROW IS
+    BEGIN
+        NULL;
+    END BEFORE EACH ROW;
+
+    AFTER EACH ROW IS
+    BEGIN
+        IF :OLD.C_VAL > 0 THEN
+            id_list.extend();
+            id_list(id_list.COUNT) := :OLD.ID;
+        END IF;
+    END AFTER EACH ROW;
+
+    AFTER STATEMENT IS
+    BEGIN
+        FOR i IN 1..id_list.COUNT
+            LOOP
+                DELETE FROM STUDENTS WHERE GROUP_ID = id_list(i);
+            END LOOP;
+    END AFTER STATEMENT;
+    END tr_group_delete_cascade;
+
 
 -- Task 6 _______________________________________________________________
 
 CREATE OR REPLACE TRIGGER tr_c_val_update
-    AFTER INSERT OR UPDATE OF GROUP_ID OR DELETE
+    FOR INSERT OR UPDATE OR DELETE
     ON STUDENTS
-    FOR EACH ROW
-DECLARE
-    PRAGMA AUTONOMOUS_TRANSACTION;
+    COMPOUND TRIGGER
+    --declare
     cnt NUMBER;
+    TYPE VECTOR IS TABLE OF NUMBER;
+    id_list VECTOR;
+
+BEFORE STATEMENT IS
 BEGIN
-    CASE
-        WHEN INSERTING THEN BEGIN
-            UPDATE GROUPS
-            SET C_VAL = C_VAL + 1
-            WHERE ID = :NEW.GROUP_ID;
-        END;
+    id_list := VECTOR();
+END BEFORE STATEMENT;
 
-        WHEN UPDATING ('GROUP_ID') THEN BEGIN
-            UPDATE GROUPS
-            SET C_VAL = C_VAL - 1
-            WHERE ID = :OLD.GROUP_ID;
+    BEFORE EACH ROW IS
+    BEGIN
+        NULL;
+    END BEFORE EACH ROW;
 
-            UPDATE GROUPS
-            SET C_VAL = C_VAL + 1
-            WHERE ID = :NEW.GROUP_ID;
-        END;
-
-        WHEN DELETING THEN BEGIN
-            UPDATE GROUPS
-            SET C_VAL = C_VAL - 1
-            WHERE ID = :OLD.GROUP_ID;
-        END;
-    END CASE;
-
-    IF UPDATING ('GROUP_ID') OR DELETING THEN
-        SELECT C_VAL
-        INTO cnt
-        FROM GROUPS
-        WHERE ID = :OLD.GROUP_ID;
-
-        IF cnt = 0 THEN
-            EXECUTE IMMEDIATE 'ALTER TRIGGER TR_GROUP_DELETE_CASCADE DISABLE';
-
-            DELETE FROM GROUPS WHERE ID = :OLD.GROUP_ID;
-
-            EXECUTE IMMEDIATE 'ALTER TRIGGER TR_GROUP_DELETE_CASCADE ENABLE';
+    AFTER EACH ROW IS
+    BEGIN
+        IF INSERTING THEN
+            UPDATE GROUPS SET C_VAL=C_VAL+1 WHERE ID=:NEW.GROUP_ID;
+        ELSIF UPDATING THEN
+            UPDATE GROUPS SET C_VAL=C_VAL+1 WHERE  ID=:NEW.GROUP_ID;
+            UPDATE GROUPS SET C_VAL=C_VAL-1 WHERE  ID=:OLD.GROUP_ID;
+            SELECT C_VAL INTO cnt FROM GROUPS WHERE ID=:OLD.GROUP_ID;
+            IF cnt = 0 THEN
+                id_list.extend();
+                id_list(id_list.COUNT) := :OLD.GROUP_ID;
+            END IF;
+        ELSIF DELETING THEN
+            UPDATE GROUPS SET C_VAL=C_VAL-1 WHERE  ID=:OLD.GROUP_ID;
+            SELECT C_VAL INTO cnt FROM GROUPS WHERE ID=:OLD.GROUP_ID;
+            IF cnt = 0 THEN
+                id_list.extend();
+                id_list(id_list.COUNT) := :OLD.GROUP_ID;
+            END IF;
         END IF;
-    END IF;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                DBMS_OUTPUT.PUT_LINE('GROUP DOES NOT EXISTS');
+    END AFTER EACH ROW;
 
-    COMMIT;
+    AFTER STATEMENT IS
+    BEGIN
+        FOR i IN 1..id_list.COUNT
+            LOOP
+                DELETE FROM GROUPS WHERE ID = id_list(i);
+            END LOOP;
+    END AFTER STATEMENT;
+    END tr_c_val_update;
 
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            DBMS_OUTPUT.PUT_LINE('GROUP DOES NOT EXISTS');
-END;
+
+drop trigger tr_c_val_update;
+drop trigger tr_group_delete_cascade;
+alter trigger tr_c_val_update disable;
+alter trigger tr_c_val_update enable;
+alter trigger tr_group_delete_cascade enable;
+alter trigger tr_group_delete_cascade disable;
+truncate table STUDENTS;
+truncate table GROUPS;
+truncate table STUDENTS_LOGS;
+delete
+from GROUPS
+where id = 1;
+delete
+from GROUPS
+where id = 2;
+
+select *
+from STUDENTS_LOGS;
+select *
+from STUDENTS;
+select *
+from GROUPS;
+
+insert into GROUPS
+values (1, '053501', 0);
+insert into GROUPS
+values (2, '053502', 0);
+insert into GROUPS
+values (3, '053503', 0);
+
+insert into STUDENTS (name, group_id)
+values ('AAA', 1);
+insert into STUDENTS (name, group_id)
+values ('BBB', 1);
+insert into STUDENTS (name, group_id)
+values ('CCC', 1);
+insert into STUDENTS (name, group_id)
+values ('DDD', 1);
+
+insert into STUDENTS (name, group_id)
+values ('EEE', 2);
+insert into STUDENTS (name, group_id)
+values ('FFF', 2);
+insert into STUDENTS (name, group_id)
+values ('GGG', 2);
+
+insert into STUDENTS (name, group_id)
+values ('QQQ', 3);
+insert into STUDENTS (name, group_id)
+values ('WWW', 3);
+insert into STUDENTS (name, group_id)
+values ('SSS', 3);
 
 
-BEGIN
-        roll_back(TO_TIMESTAMP('2023/03/10 09:50:00', 'YYYY/MM/DD HH:MI:SS'));
+begin
+    ROLL_BACK(TO_TIMESTAMP('2023/03/10 4:11:00', 'YYYY/MM/DD HH:MI:SS'));
 end;
 
+begin
+    ROLL_BACK(TO_TIMESTAMP(CURRENT_TIMESTAMP - 1 / 12));
+end;
 
+select *
+from user_errors
+where type = 'TRIGGER'
+  and name = 'tr_c_val_update';
