@@ -233,7 +233,7 @@ END;
 
 -- Task 5 ________________________________________________________________
 
-CREATE OR REPLACE PROCEDURE roll_back(time TIMESTAMP)
+CREATE OR REPLACE PROCEDURE roll_back(time TIMESTAMP, offset NUMBER := 0)
     IS
     CURSOR c_logs IS
         SELECT *
@@ -242,7 +242,7 @@ CREATE OR REPLACE PROCEDURE roll_back(time TIMESTAMP)
 BEGIN
     FOR curr IN c_logs
         LOOP
-            IF curr.TIME > time THEN
+            IF curr.TIME > time - offset * 1/(24 * 60 * 60) THEN
                 IF curr.OPERATION_TYPE = 'INSERT' THEN
                     DELETE
                     FROM STUDENTS
@@ -272,7 +272,7 @@ BEGIN
         END LOOP;
 END;
 
-    
+
 -- Task 3 ____________________________________________
 
 CREATE OR REPLACE TRIGGER tr_group_delete_cascade
@@ -367,69 +367,3 @@ END BEFORE STATEMENT;
     END tr_c_val_update;
 
 
-drop trigger tr_c_val_update;
-drop trigger tr_group_delete_cascade;
-alter trigger tr_c_val_update disable;
-alter trigger tr_c_val_update enable;
-alter trigger tr_group_delete_cascade enable;
-alter trigger tr_group_delete_cascade disable;
-truncate table STUDENTS;
-truncate table GROUPS;
-truncate table STUDENTS_LOGS;
-delete
-from GROUPS
-where id = 1;
-delete
-from GROUPS
-where id = 2;
-
-select *
-from STUDENTS_LOGS;
-select *
-from STUDENTS;
-select *
-from GROUPS;
-
-insert into GROUPS
-values (1, '053501', 0);
-insert into GROUPS
-values (2, '053502', 0);
-insert into GROUPS
-values (3, '053503', 0);
-
-insert into STUDENTS (name, group_id)
-values ('AAA', 1);
-insert into STUDENTS (name, group_id)
-values ('BBB', 1);
-insert into STUDENTS (name, group_id)
-values ('CCC', 1);
-insert into STUDENTS (name, group_id)
-values ('DDD', 1);
-
-insert into STUDENTS (name, group_id)
-values ('EEE', 2);
-insert into STUDENTS (name, group_id)
-values ('FFF', 2);
-insert into STUDENTS (name, group_id)
-values ('GGG', 2);
-
-insert into STUDENTS (name, group_id)
-values ('QQQ', 3);
-insert into STUDENTS (name, group_id)
-values ('WWW', 3);
-insert into STUDENTS (name, group_id)
-values ('SSS', 3);
-
-
-begin
-    ROLL_BACK(TO_TIMESTAMP('2023/03/10 4:11:00', 'YYYY/MM/DD HH:MI:SS'));
-end;
-
-begin
-    ROLL_BACK(TO_TIMESTAMP(CURRENT_TIMESTAMP - 1 / 12));
-end;
-
-select *
-from user_errors
-where type = 'TRIGGER'
-  and name = 'tr_c_val_update';
