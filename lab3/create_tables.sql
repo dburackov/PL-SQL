@@ -20,6 +20,12 @@ CREATE TABLE prod.smth1
     CONSTRAINT smth1_pk PRIMARY KEY (id)
 );
 
+CREATE TABLE prod.smth3
+(
+    id         NUMBER       not null,
+    some_field VARCHAR2(59) not null,
+    CONSTRAINT smth1_pk PRIMARY KEY (id)
+);
 
 CREATE TABLE dev.three
 (
@@ -31,19 +37,19 @@ CREATE TABLE dev.three
 CREATE TABLE dev.two
 (
     id         NUMBER(10)   not null,
-    id_2       NUMBER(10)   not null,
+    id_2 NUMBER(10) not null,
     some_field VARCHAR2(59) not null,
     CONSTRAINT two_pk PRIMARY KEY (id),
-    CONSTRAINT two_fk FOREIGN KEY (id_2) REFERENCES dev.three (id)
+    CONSTRAINT two_fk FOREIGN KEY (id_2) REFERENCES dev.three(id)
 );
 
 CREATE TABLE dev.one
 (
     id         NUMBER(10)   not null,
-    id_2       NUMBER(10)   not null,
+    id_2 NUMBER(10) not null,
     some_field VARCHAR2(59) not null,
     CONSTRAINT one_pk PRIMARY KEY (id),
-    CONSTRAINT one_fk FOREIGN KEY (id_2) REFERENCES dev.two (id)
+    CONSTRAINT one_fk FOREIGN KEY (id_2) REFERENCES dev.two(id)
 );
 
 CREATE TABLE fk_table
@@ -53,10 +59,18 @@ CREATE TABLE fk_table
     parent VARCHAR2(100)
 );
 
-drop table dev.smth1;
-drop table dev.smth2;
-drop table dev.one;
-drop table dev.two;
-drop table dev.three;
-drop table prod.smth1;
-drop table SYSTEM.FK_TABLE;
+-- CREATE TABLE dev.cycled
+-- (
+--     id NUMBER(10) not null,
+--
+--     CONSTRAINT pk PRIMARY KEY (id),
+--     CONSTRAINT fk FOREIGN KEY (id) REFERENCES dev.cycled (id)
+-- );
+
+CREATE TABLE ddl_table
+(
+    table_name VARCHAR2(100),
+    ddl_script VARCHAR2(3000),
+    type       VARCHAR2(100),
+    priority   NUMBER(10) DEFAULT 100000
+);
