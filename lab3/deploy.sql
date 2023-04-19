@@ -1,4 +1,6 @@
+
 CREATE OR REPLACE PROCEDURE DEPLOY(dev_schema_name VARCHAR2, prod_schema_name VARCHAR2)
+    AUTHID CURRENT_USER
     IS
 BEGIN
     EXECUTE IMMEDIATE 'TRUNCATE TABLE DDL_TABLE';
@@ -15,10 +17,13 @@ BEGIN
 
     PROD_PROCEDURE_CREATE(dev_schema_name, prod_schema_name);
     PROD_PROCEDURE_DELETE(dev_schema_name, prod_schema_name);
+    PROD_PROCEDURE_DELETE_CREATE(dev_schema_name, prod_schema_name);
     PROD_FUNCTION_CREATE(dev_schema_name, prod_schema_name);
     PROD_FUNCTION_DELETE(dev_schema_name, prod_schema_name);
+    PROD_FUNCTION_DELETE_CREATE(dev_schema_name, prod_schema_name);
     PROD_INDEX_CREATE(dev_schema_name, prod_schema_name);
     PROD_INDEX_DELETE(dev_schema_name, prod_schema_name);
 END;
+
 
 CALL DEPLOY('DEV', 'PROD');
