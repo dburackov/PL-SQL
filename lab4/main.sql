@@ -21,3 +21,34 @@ BEGIN
 
     RETURN STRING_RESULT;
 END;
+
+CREATE OR REPLACE FUNCTION EXTRACT_VALUES(
+    XML_STRING IN VARCHAR2,
+    PATH_STRING IN VARCHAR2
+) RETURN XML_RECORD IS
+    I                  NUMBER       := 1;
+    COLLECTION_LENGTH  NUMBER       := 0;
+    CURRENT_NODE_VALUE VARCHAR2(50) := ' ';
+    XML_COLLECTION     XML_RECORD   := XML_RECORD();
+BEGIN
+    SELECT EXTRACTVALUE(XMLTYPE(XML_STRING),
+                        PATH_STRING || '[' || I || ']')
+    INTO CURRENT_NODE_VALUE
+    FROM DUAL;
+    WHILE CURRENT_NODE_VALUE IS NOT NULL
+        LOOP
+            I := I + 1;
+            -- DBMS_OUTPUT.PUT_LINE(PATH_STRING
+            --     || '['
+            --     || I
+            --     || ']');
+            COLLECTION_LENGTH := COLLECTION_LENGTH + 1;
+            XML_COLLECTION.EXTEND();
+            XML_COLLECTION(COLLECTION_LENGTH) := TRIM(CURRENT_NODE_VALUE);
+            SELECT EXTRACTVALUE(XMLTYPE(XML_STRING),
+                                PATH_STRING || '[' || I || ']')
+            INTO CURRENT_NODE_VALUE
+            FROM DUAL;
+        END LOOP;
+    RETURN XML_COLLECTION;
+END;
