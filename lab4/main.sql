@@ -249,3 +249,255 @@ CREATE OR REPLACE PACKAGE BODY LAB4 AS
         END IF;
         RETURN WHERE_CLOUSE;
     END PROCESS_WHERE;
+
+
+    FUNCTION PROCESS_SELECT(XML_STRING IN VARCHAR2) RETURN SYS_REFCURSOR IS
+        RF_CUR SYS_REFCURSOR;
+    BEGIN
+        OPEN RF_CUR FOR PROCESS_OPERATOR(XML_STRING);
+        RETURN RF_CUR;
+    END;
+
+
+    FUNCTION PROCESS_INSERT(XML_STRING IN VARCHAR2) RETURN VARCHAR2 IS
+        VALUES_TO_INSERT       VARCHAR2(1000);
+        SELECT_QUERY_TO_INSERT VARCHAR2(1000);
+        XML_VALUES             XML_RECORD := XML_RECORD();
+        INSERT_QUERY           VARCHAR2(1000);
+        TABLE_NAME             VARCHAR2(100);
+        XML_COLUMNS            VARCHAR2(200);
+    BEGIN
+        SELECT EXTRACT(XMLTYPE(XML_STRING),
+                       'Operation/Values').GETSTRINGVAL()
+        INTO VALUES_TO_INSERT
+        FROM DUAL;
+        SELECT EXTRACTVALUE(XMLTYPE(XML_STRING),
+                            'Operation/Table')
+        INTO TABLE_NAME
+        FROM DUAL;
+        XML_COLUMNS := '('
+            || CONCAT_STRING(EXTRACT_VALUES(XML_STRING, 'Operation/Columns/Column'), ',')
+            || ')';
+        INSERT_QUERY := 'INSERT INTO '
+            || TABLE_NAME
+            || XML_COLUMNS;
+        IF VALUES_TO_INSERT IS NOT NULL THEN
+            XML_VALUES := EXTRACT_VALUES(VALUES_TO_INSERT, 'Values/Value');
+            INSERT_QUERY := INSERT_QUERY
+                || ' VALUES'
+                || '('
+                || XML_VALUES(1)
+                || ') ';
+            FOR I IN 2..XML_VALUES.COUNT
+                LOOP
+                    INSERT_QUERY := INSERT_QUERY
+                        || ',('
+                        || XML_VALUES(I)
+                        || ') ';
+                END LOOP;
+        ELSE
+            SELECT EXTRACT(XMLTYPE(XML_STRING), 'Operation/Operation').GETSTRINGVAL()
+            INTO SELECT_QUERY_TO_INSERT
+            FROM DUAL;
+            INSERT_QUERY := INSERT_QUERY
+                || PROCESS_OPERATOR(SELECT_QUERY_TO_INSERT);
+        END IF;
+        RETURN INSERT_QUERY;
+    END;
+
+    FUNCTION PROCESS_UPDATE(XML_STRING IN VARCHAR2) RETURN VARCHAR2 IS
+        SET_COLLECTION     XML_RECORD     := XML_RECORD();
+        WHERE_CLOUSE       VARCHAR2(1000) := ' WHERE ';
+        SET_OPERATIONS     VARCHAR2(1000);
+        SUB_QUERY          VARCHAR2(1000);
+        CONDITION_OPERATOR VARCHAR2(1000);
+        UPDATE_QUERY       VARCHAR2(1000) := 'UPDATE ';
+        TABLE_NAME         VARCHAR2(100);
+    BEGIN
+        SELECT EXTRACT(XMLTYPE(XML_STRING),
+                       'Operation/SetOperations').GETSTRINGVAL()
+        INTO SET_OPERATIONS
+        FROM DUAL;
+        SELECT EXTRACTVALUE(XMLTYPE(XML_STRING),
+                            'Operation/Table')
+        INTO TABLE_NAME
+        FROM DUAL;
+        SET_COLLECTION := EXTRACT_VALUES(SET_OPERATIONS, 'SetOperations/Set');
+        UPDATE_QUERY := UPDATE_QUERY
+            || TABLE_NAME
+            || ' SET '
+            || SET_COLLECTION(1);
+        FOR I IN 2..SET_COLLECTION.COUNT
+            LOOP
+                UPDATE_QUERY := UPDATE_QUERY
+                    || ','
+                    || SET_COLLECTION(I);
+            END LOOP;
+        UPDATE_QUERY := UPDATE_QUERY
+            || PROCESS_WHERE(XML_STRING);
+        RETURN UPDATE_QUERY;
+    END;
+
+    FUNCTION PROCESS_DELETE(XML_STRING IN VARCHAR2) RETURN VARCHAR2 IS
+        WHERE_CLOUSE       VARCHAR2(1000) := ' WHERE ';
+        CONDITION_OPERATOR VARCHAR2(100);
+        DELETE_QUERY       VARCHAR2(1000) := 'DELETE FROM ';
+        TABLE_NAME         VARCHAR2(100);
+    BEGIN
+        SELECT EXTRACTVALUE(XMLTYPE(XML_STRING),
+                            'Operation/Table')
+        INTO TABLE_NAME
+        FROM DUAL;
+        DELETE_QUERY := DELETE_QUERY || TABLE_NAME || PROCESS_WHERE(XML_STRING);
+        RETURN DELETE_QUERY;
+    END;
+
+    FUNCTION PROCESS_CREATE(XML_STRING IN VARCHAR2) RETURN VARCHAR2 IS
+        TABLE_COLUMNS         XML_RECORD     := XML_RECORD();
+        TABLE_NAME            VARCHAR2(100);
+        COL_CONSTRAINTS       XML_RECORD     := XML_RECORD();
+        TABLE_CONSTRAINTS     XML_RECORD     := XML_RECORD();
+        COL_NAME              VARCHAR2(100);
+        COL_TYPE              VARCHAR2(100);
+        PARENT_TABLE          VARCHAR2(100);
+        CREATE_QUERY          VARCHAR2(1000) := 'CREATE TABLE ';
+        PRIMARY_CONSTRAINT    VARCHAR2(1000);
+        FOREIGN_CONSTRAINT    VARCHAR2(1000);
+        AUTO_INCREMENT_SCRIPT VARCHAR2(1000);
+    BEGIN
+        SELECT EXTRACTVALUE(XMLTYPE(XML_STRING),
+                            'Operation/Table')
+        INTO TABLE_NAME
+        FROM DUAL;
+        CREATE_QUERY := CREATE_QUERY
+            || TABLE_NAME
+            || '(';
+        TABLE_COLUMNS := EXTRACT_WITH_SUBNODES(XML_STRING, 'Operation/Columns/Column');
+        FOR I IN 1 .. TABLE_COLUMNS.COUNT
+            LOOP
+                SELECT EXTRACTVALUE(XMLTYPE(TABLE_COLUMNS(I)),
+                                    'Column/Name')
+                INTO COL_NAME
+                FROM DUAL;
+                SELECT EXTRACTVALUE(XMLTYPE(TABLE_COLUMNS(I)),
+                                    'Column/Type')
+                INTO COL_TYPE
+                FROM DUAL;
+                COL_CONSTRAINTS := EXTRACT_VALUES(TABLE_COLUMNS(I), 'Column/Constraints/Constraint');
+                CREATE_QUERY := CREATE_QUERY
+                    || ' '
+                    || COL_NAME
+                    || ' '
+                    || COL_TYPE
+                    || ' '
+                    || CONCAT_STRING(COL_CONSTRAINTS, '
+            ');
+                IF I != TABLE_COLUMNS.COUNT THEN
+                    CREATE_QUERY := CREATE_QUERY
+                        || ' , ';
+                END IF;
+            END LOOP;
+        SELECT EXTRACT(XMLTYPE(XML_STRING),
+                       'Operation/TableConstraints/PrimaryKey').GETSTRINGVAL()
+        INTO PRIMARY_CONSTRAINT
+        FROM DUAL;
+
+        IF PRIMARY_CONSTRAINT IS NOT NULL THEN
+            CREATE_QUERY := CREATE_QUERY
+                || 'Constraint'
+                || TABLE_NAME
+                || '_pk PRIMARY KEY ('
+                || CONCAT_STRING(EXTRACT_VALUES(PRIMARY_CONSTRAINT, 'PrimaryKey/Columns/Column'), ',')
+                || ')';
+        ELSE
+            AUTO_INCREMENT_SCRIPT := GENERATE_AUTO_INCREMENT(TABLE_NAME);
+            CREATE_QUERY := CREATE_QUERY
+                || ', ID NUMBER PRIMARY KEY';
+        END IF;
+
+        TABLE_CONSTRAINTS := EXTRACT_WITH_SUBNODES(XML_STRING, 'Operation/TableConstraints/ForeignKey');
+        FOR I IN 1 .. TABLE_CONSTRAINTS.COUNT
+            LOOP
+                SELECT EXTRACTVALUE(XMLTYPE(TABLE_CONSTRAINTS(I)),
+                                    'ForeignKey/Parent')
+                INTO PARENT_TABLE
+                FROM DUAL;
+                CREATE_QUERY := CREATE_QUERY
+                    || ' , CONSTRAINT '
+                    || TABLE_NAME
+                    || '_'
+                    || PARENT_TABLE
+                    || '_fk Foreign Key ('
+                    || CONCAT_STRING(EXTRACT_VALUES(TABLE_CONSTRAINTS(I), 'ForeignKey/ChildColumns/Column'), ' , ')
+                    || ' ) '
+                    || 'REFERENCES '
+                    || PARENT_TABLE
+                    || '('
+                    || CONCAT_STRING(EXTRACT_VALUES(TABLE_CONSTRAINTS(I), 'ForeignKey/ChildColumns/Column'), ' , ')
+                    || ')';
+            END LOOP;
+        CREATE_QUERY := CREATE_QUERY
+            || ');'
+            || AUTO_INCREMENT_SCRIPT;
+        RETURN CREATE_QUERY;
+    END;
+
+    FUNCTION PROCESS_DROP(XML_STRING IN VARCHAR2) RETURN VARCHAR2 IS
+        DROP_QUERY VARCHAR2(1000) := 'DROP TABLE ';
+        TABLE_NAME VARCHAR2(100);
+    BEGIN
+        SELECT EXTRACTVALUE(XMLTYPE(XML_STRING),
+                            'Operation/Table')
+        INTO TABLE_NAME
+        FROM DUAL;
+        DROP_QUERY := DROP_QUERY || TABLE_NAME;
+        RETURN DROP_QUERY;
+    END;
+
+    FUNCTION GENERATE_AUTO_INCREMENT(TABLE_NAME IN VARCHAR2) RETURN VARCHAR2 IS
+        AUTO_INCREMENT_SCRIPT VARCHAR(1000);
+    BEGIN
+        AUTO_INCREMENT_SCRIPT := 'CREATE SEQUENCE '
+            || TABLE_NAME
+            || '_pk_seq'
+            || '; ';
+        AUTO_INCREMENT_SCRIPT := AUTO_INCREMENT_SCRIPT
+            || 'CREATE OR REPLACE TRIGGER '
+            || TABLE_NAME
+            || ' BEFORE INSERT ON '
+            || TABLE_NAME
+            || ' FOR EACH '
+            || 'ROW BEGIN'
+            || ' IF INSERTING THEN '
+            || ' SELECT '
+            || TABLE_NAME
+            || '_pk_seq'
+            || '.NEXTVAL INTO :NEW."ID" FROM DUAL;'
+            || ' END IF;'
+            || 'END';
+        RETURN AUTO_INCREMENT_SCRIPT;
+    END;
+END LAB4;
+
+CREATE OR REPLACE PROCEDURE PARSE(XML_STRING IN VARCHAR2) IS
+    OPERATION_TYPE VARCHAR2(100);
+BEGIN
+    SELECT EXTRACTVALUE(XMLTYPE(XML_STRING), 'Operation/Type')
+    INTO OPERATION_TYPE
+    FROM DUAL;
+
+    DBMS_OUTPUT.PUT_LINE(OPERATION_TYPE);
+    IF OPERATION_TYPE = 'DELETE' THEN
+        DBMS_OUTPUT.PUT_LINE(LAB4.PROCESS_DELETE(XML_STRING));
+    ELSIF OPERATION_TYPE = 'INSERT' THEN
+        DBMS_OUTPUT.PUT_LINE(LAB4.PROCESS_INSERT(XML_STRING));
+    ELSIF OPERATION_TYPE = 'UPDATE' THEN
+        DBMS_OUTPUT.PUT_LINE(LAB4.PROCESS_UPDATE(XML_STRING));
+    ELSIF OPERATION_TYPE = 'CREATE' THEN
+        DBMS_OUTPUT.PUT_LINE(LAB4.PROCESS_CREATE(XML_STRING));
+    ELSIF OPERATION_TYPE = 'DROP' THEN
+        DBMS_OUTPUT.PUT_LINE(LAB4.PROCESS_DROP(XML_STRING));
+    ELSE
+        DBMS_OUTPUT.PUT_LINE(LAB4.PROCESS_OPERATOR(XML_STRING));
+    END IF;
+end;
